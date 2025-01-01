@@ -16,27 +16,65 @@
 
 from datetime import datetime, timedelta
 
+def get_non_empty_string_input(prompt):
+    while True:
+        value = input(prompt).strip()
+        if value:
+            return value
+        print("Input cannot be empty. Please enter a valid value.")
+
+def get_date_input(prompt, min_date=None):
+    while True:
+        date_str = input(prompt).strip()
+        if not date_str:
+            print("Input cannot be empty. Please enter a valid date.")
+            continue
+        try:
+            date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            if date > datetime.now().date():
+                print("Date cannot be in the future.")
+            elif min_date and date < min_date:
+                print(f"Date cannot be earlier than {min_date}.")
+            else:
+                return date
+        except ValueError:
+            print("Invalid date format. Please use YYYY-MM-DD.")
+
+def get_numeric_input(prompt, min_value=1, max_value=365):
+    while True:
+        value = input(prompt)
+        if value.isdigit() and min_value <= int(value) <= max_value:
+            return int(value)
+        print(f"Invalid input. Please enter a number between {min_value} and {max_value}.")
+
+
+def get_isbn_input(prompt):
+    while True:
+        isbn = input(prompt).replace('-', '').strip()
+        if len(isbn) == 13 and isbn.isdigit():
+            return isbn
+        print("Invalid ISBN. Please enter a valid 13-digit numeric ISBN (hyphens allowed).")
+
+
 class Book:
     def __init__(self, title, author, ISBN, borrow_period):
         self.title = title
         self.author = author
         self.ISBN = ISBN
-        self.available = True  # By default, the book is available
-        self.borrow_period = borrow_period  # The borrow period in days
+        self.available = True
+        self.borrow_period = borrow_period
 
     def checkout(self):
         if self.available:
             self.available = False
             return True
-        else:
-            return False
+        return False
 
     def return_book(self):
         if not self.available:
             self.available = True
             return True
-        else:
-            return False
+        return False
 
 class Member:
     MAX_BORROW_LIMIT = 5
@@ -47,9 +85,6 @@ class Member:
         self.borrowed_books = []
 
     def borrow_book(self, book):
-        if book in self.borrowed_books:
-            print("You have already borrowed this book.")
-            return False
         if len(self.borrowed_books) >= self.MAX_BORROW_LIMIT:
             print("You cannot borrow more than the allowed number of books.")
             return False
@@ -58,21 +93,21 @@ class Member:
                 self.borrowed_books.append(book)
                 print("Book borrowed successfully.")
                 return True
-        else:
-            print("Book is not available.")
-            return False
+        print("Book is not available.")
+        return False
 
     def return_book(self, book):
         if book in self.borrowed_books:
             if book.return_book():
                 self.borrowed_books.remove(book)
-                print("Book has been removed from your borrow list.")
+                print("Book returned successfully.")
                 return True
-        else:
-            print("You have not borrowed this book.")
-            return False
+        print("You have not borrowed this book.")
+        return False
 
 class Transaction:
+    FINE_RATE = 1  # Default fine rate ($1 per day)
+
     def __init__(self, member_id, ISBN, borrow_period):
         self.member_id = member_id
         self.ISBN = ISBN
@@ -84,32 +119,20 @@ class Transaction:
     def borrow_book(self, date):
         self.borrow_date = date
 
-    def return_book(self, member_id, ISBN):
-        member = self.find_member(member_id)
-        book = self.find_book(ISBN)
-
-        if member is None:
-            print("Member not found.")
-        elif book is None:
-            print("Book not found.")
-        else:
-            if book in member.borrowed_books:
-                return_date = self.get_date_input("Enter return date (YYYY-MM-DD): ")
-                if member.return_book(book):
-                    transaction = next((transaction for transaction in self.transactions if
-                                        transaction.member_id == member_id and transaction.ISBN == ISBN), None)
-                    transaction.return_book(return_date)
-                else:
-                    print("This book was not borrowed by you.")
+    def return_book(self, date):
+        self.return_date = date
+        self.calculate_fine()
 
     def calculate_fine(self):
-        if self.return_date and self.borrow_date:
-            overdue_days = (self.return_date - self.borrow_date).days - self.borrow_period
-            if overdue_days > 0:
-                self.fine = overdue_days * 1  # Assuming $1 fine per day
-                print(f"Fine for overdue: ${self.fine}")
-            else:
-                print("No fine. Book returned on time.")
+        if not self.borrow_date or not self.return_date:
+            print("Error in fine calculation: Missing borrow or return date.")
+            return
+        overdue_days = (self.return_date - self.borrow_date).days - self.borrow_period
+        self.fine = max(overdue_days * self.FINE_RATE, 0)
+        if overdue_days > 0:
+            print(f"Fine for overdue: ${self.fine:.2f}")
+        else:
+            print("No fine. Book returned on time.")
 
 class Library:
     def __init__(self):
@@ -118,6 +141,9 @@ class Library:
         self.transactions = []
 
     def add_book(self, book):
+        if book.borrow_period <= 0:
+            print("Borrow period must be a positive number of days.")
+            return
         if any(b.ISBN == book.ISBN for b in self.books):
             print("A book with this ISBN already exists.")
         else:
@@ -125,128 +151,141 @@ class Library:
             print("Book added successfully.")
 
     def register_member(self, member):
-        self.members.append(member)
-        print("Member registered successfully.")
+        if any(m.member_id == member.member_id for m in self.members):
+            print("A member with this ID already exists.")
+        else:
+            self.members.append(member)
+            print("Member registered successfully.")
 
-    def get_date_input(self, prompt):
-        while True:
-            date_str = input(prompt)
-            try:
-                date = datetime.strptime(date_str, "%Y-%m-%d").date()
-                if date > datetime.now().date():
-                    print("Date cannot be in the future.")
-                else:
-                    return date
-            except ValueError:
-                print("Invalid date format. Please use YYYY-MM-DD.")
+    def find_member(self, member_id=None, name=None):
+        return next((m for m in self.members if
+                     (member_id is None or m.member_id == member_id) and
+                     (name is None or name.lower() in m.name.lower())), None)
 
-    def get_numeric_input(self, prompt):
-        while True:
-            value = input(prompt)
-            if value.isdigit() and int(value) > 0:
-                return int(value)
-            else:
-                print("Invalid input. Please enter a positive numeric value.")
-
-    def get_isbn_input(self, prompt):
-        while True:
-            isbn = input(prompt)
-            if len(isbn) == 13 and isbn.isdigit():
-                return isbn
-            else:
-                print("Invalid ISBN. Please enter a 13-digit numeric ISBN.")
-
-    def find_and_check_member(self, member_id):
-        member = self.find_member(member_id)
-        if member is None:
-            print(f"Member with ID {member_id} not found.")
-        return member
-
-    def find_and_check_book(self, ISBN):
-        book = self.find_book(ISBN)
-        if book is None:
-            print(f"Book with ISBN {ISBN} not found.")
-        return book
+    def find_book(self, ISBN):
+        return next((book for book in self.books if book.ISBN == ISBN), None)
 
     def borrow_book(self, member_id, ISBN):
-        member = self.find_and_check_member(member_id)
-        book = self.find_and_check_book(ISBN)
+        member = self.find_member(member_id)
+        if not member:
+            print("Member not found.")
+            return
 
-        if member and book:
-            if not book.available:
-                print("Book is already borrowed by another member.")
-            else:
-                borrow_date = self.get_date_input("Enter borrow date (YYYY-MM-DD): ")
-                if member.borrow_book(book):
-                    transaction = Transaction(member_id, ISBN, book.borrow_period)
-                    transaction.borrow_book(borrow_date)
-                    self.transactions.append(transaction)
+        book = self.find_book(ISBN)
+        if not book:
+            print("Book not found.")
+            return
+
+        if any(t for t in self.transactions if t.member_id == member_id and t.ISBN == ISBN and t.return_date is None):
+            print("This book is already borrowed by this member.")
+            return
+
+        if member.borrow_book(book):
+            borrow_date = get_date_input("Enter borrow date (YYYY-MM-DD): ")
+            transaction = Transaction(member_id, ISBN, book.borrow_period)
+            transaction.borrow_book(borrow_date)
+            self.transactions.append(transaction)
+
+        if len(self.transactions) >= 1000:  # Example limit
+            print("System limit reached. Cannot process more transactions.")
+            return
+
+    def process_return_transaction(self, transaction, return_date):
+        if transaction:
+            transaction.return_book(return_date)
+        else:
+            print("No transaction found for this book and member. Logging this anomaly.")
 
     def return_book(self, member_id, ISBN):
-        member = self.find_and_check_member(member_id)
-        book = self.find_and_check_book(ISBN)
+        if not any(
+                t for t in self.transactions if t.member_id == member_id and t.ISBN == ISBN and t.return_date is None):
+            print("This book was not borrowed by this member.")
+            return
 
-        if member and book:
-            if book in member.borrowed_books:
-                return_date = self.get_date_input("Enter return date (YYYY-MM-DD): ")
-                if member.return_book(book):
-                    transaction = next((transaction for transaction in self.transactions if
-                                        transaction.member_id == member_id and transaction.ISBN == ISBN), None)
-                    if transaction is None:
-                        transaction = Transaction(member_id, ISBN, book.borrow_period)
-                        self.transactions.append(transaction)
-                    transaction.return_book(return_date)
-                else:
-                    print("This book was not borrowed by you.")
+        member = self.find_member(member_id)
+        if not member:
+            print("Member not found.")
+            return
 
-    def display_books(self):
-        print(f"{'Title':<30} {'Author':<20} {'ISBN':<15} {'Availability':<15}")
-        print("=" * 80)
-        for book in self.books:
-            availability = "Available" if book.available else "Checked Out"
-            print(f"{book.title:<30} {book.author:<20} {book.ISBN:<15} {availability:<15}")
-        print(
-            f"Total books: {len(self.books)}, Borrowed books: {len([book for book in self.books if not book.available])}")
+        book = self.find_book(ISBN)
+        if not book:
+            print("Book not found.")
+            return
+
+        return_date = get_date_input("Enter return date (YYYY-MM-DD): ")
+        transaction = next((t for t in self.transactions if t.member_id == member_id and t.ISBN == ISBN), None)
+        if member.return_book(book):
+            self.process_return_transaction(transaction, return_date)
+        else:
+            print("You have not borrowed this book.")
+            # Optional: Log the anomaly in a file or list for debugging.
+
+    def search_books(self, title=None, author=None, ISBN=None):
+        results = [
+            book for book in self.books
+            if (title is None or title.lower() in book.title.lower()) and
+               (author is None or author.lower() in book.author.lower()) and
+               (ISBN is None or ISBN.replace('-', '') == book.ISBN)
+        ]
+        if results:
+            print(f"{'Title':<30} {'Author':<20} {'ISBN':<15} {'Availability':<15}")
+            print("=" * 80)
+            for book in results:
+                availability = "Available" if book.available else "Checked Out"
+                print(f"{book.title:<30} {book.author:<20} {book.ISBN:<15} {availability:<15}")
+        else:
+            print("No books found matching the search criteria.")
+
+    def display_books(self, page_size=5):
+        total_books = len(self.books)
+        if total_books == 0:
+            print("No books available in the library.")
+            return
+        for i in range(0, total_books, page_size):
+            print(f"{'Title':<30} {'Author':<20} {'ISBN':<15} {'Availability':<15}")
+            print("=" * 80)
+            for book in self.books[i:i + page_size]:
+                availability = "Available" if book.available else "Checked Out"
+                print(f"{book.title:<30} {book.author:<20} {book.ISBN:<15} {availability:<15}")
+            if input("Press Enter to continue or type 'q' to quit: ").lower() == 'q':
+                break
+
+    def display_members(self):
+        if not self.members:
+            print("No members registered.")
+            return
+        print(f"{'Member ID':<15} {'Name':<20} {'Books Borrowed':<15}")
+        print("=" * 50)
+        for member in self.members:
+            print(f"{member.member_id:<15} {member.name:<20} {len(member.borrowed_books):<15}")
 
     def display_members(self):
         for member in self.members:
             print(f"Member ID: {member.member_id}, Name: {member.name}")
 
     def display_transactions(self):
-        for transaction in self.transactions:
-            borrow_date = transaction.borrow_date.strftime('%B %d, %Y') if transaction.borrow_date else "N/A"
-            return_date = transaction.return_date.strftime('%B %d, %Y') if transaction.return_date else "N/A"
-            overdue_status = "Overdue" if transaction.fine > 0 else "On Time"
-            print(
-                f"Member ID: {transaction.member_id}, ISBN: {transaction.ISBN}, Borrowed: {borrow_date}, Returned: {return_date}, Fine: ${transaction.fine}, Status: {overdue_status}")
+        for t in self.transactions:
+            borrow_date = t.borrow_date.strftime('%Y-%m-%d') if t.borrow_date else "N/A"
+            return_date = t.return_date.strftime('%Y-%m-%d') if t.return_date else "N/A"
+            status = "Overdue" if t.fine > 0 else "On Time"
+            print(f"Member ID: {t.member_id}, ISBN: {t.ISBN}, Borrowed: {borrow_date}, Returned: {return_date}, Fine: ${t.fine:.2f}, Status: {status}")
 
-    def search_books(self, title=None, author=None, ISBN=None):
-        results = [book for book in self.books if
-                   (title and title.lower() in book.title.lower()) or
-                   (author and author.lower() in book.author.lower()) or
-                   (ISBN and ISBN == book.ISBN)]
-        if results:
-            for book in results:
-                print(f"Title: {book.title}, Author: {book.author}, ISBN: {book.ISBN}, Available: {book.available}")
-        else:
-            print("No books found.")
+    def log_error(self, message):
+        with open("error_log.txt", "a") as log_file:
+            log_file.write(f"{datetime.now()}: {message}\n")
+        print(message)
 
-    def find_member(self, member_id):
-        member = next((member for member in self.members if member.member_id == member_id), None)
-        if member is None:
-            print(f"Member with ID {member_id} not found.")
-        return member
+import os
 
-    def find_book(self, ISBN):
-        book = next((book for book in self.books if book.ISBN == ISBN), None)
-        if book is None:
-            print(f"Book with ISBN {ISBN} not found.")
-        return book
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
 
 def Library_Management_System():
     library = Library()
 
     while True:
+        clear_screen()
         print("\nLibrary Management System")
         print("1. Add Book")
         print("2. Register Member")
@@ -261,40 +300,53 @@ def Library_Management_System():
         choice = input("Enter your choice: ")
 
         if choice == '1':
-            title = input("Enter book title: ")
-            author = input("Enter book author: ")
-            ISBN = library.get_isbn_input("Enter book ISBN: ")
-            borrow_period = library.get_numeric_input("Enter borrow period (days): ")
-            book = Book(title, author, ISBN, borrow_period)
-            library.add_book(book)
+            title = get_non_empty_string_input("Enter book title: ")
+            author = get_non_empty_string_input("Enter book author: ")
+            ISBN = get_isbn_input("Enter book ISBN: ")
+            borrow_period = get_numeric_input("Enter borrow period (days): ")
+            library.add_book(Book(title, author, ISBN, borrow_period))
+
         elif choice == '2':
-            member_id = library.get_numeric_input("Enter member ID: ")
-            name = input("Enter member name: ")
-            member = Member(member_id, name)
-            library.register_member(member)
+            member_id = get_non_empty_string_input("Enter member ID: ")
+            name = get_non_empty_string_input("Enter member name: ")
+            library.register_member(Member(member_id, name))
+
         elif choice == '3':
-            member_id = library.get_numeric_input("Enter member ID: ")
-            ISBN = library.get_isbn_input("Enter book ISBN: ")
+            member_id = get_non_empty_string_input("Enter member ID: ")
+            ISBN = get_isbn_input("Enter book ISBN: ")
             library.borrow_book(member_id, ISBN)
+
         elif choice == '4':
-            member_id = library.get_numeric_input("Enter member ID: ")
-            ISBN = library.get_isbn_input("Enter book ISBN: ")
+            member_id = get_non_empty_string_input("Enter member ID: ")
+            ISBN = get_isbn_input("Enter book ISBN: ")
             library.return_book(member_id, ISBN)
+
         elif choice == '5':
             library.display_books()
+
         elif choice == '6':
             library.display_members()
+
         elif choice == '7':
             library.display_transactions()
+
         elif choice == '8':
-            title = input("Enter book title to search (leave blank to skip): ")
-            author = input("Enter book author to search (leave blank to skip): ")
-            ISBN = input("Enter book ISBN to search (leave blank to skip): ")
-            library.search_books(title, author, ISBN)
+            title = input("Enter book title to search (leave blank to skip): ").strip() or None
+            author = input("Enter book author to search (leave blank to skip): ").strip() or None
+            ISBN = input("Enter book ISBN to search (leave blank to skip): ").strip() or None
+            library.search_books(title=title, author=author, ISBN=ISBN)
+
         elif choice == '9':
-            confirm = input("Are you sure you want to exit? (yes/no): ")
-            if confirm.lower() == 'yes':
-                break
+            while True:
+                confirm = input("Are you sure you want to exit? (yes/no): ").strip().lower()
+                if confirm.startswith("y"):
+                    print("Exiting the system. Goodbye!")
+                    return
+                elif confirm.startswith("n"):
+                    print("Returning to the main menu.")
+                    break
+                else:
+                    print("Invalid input. Please enter 'yes' or 'no'.")
         else:
             print("Invalid choice. Please try again.")
 
@@ -302,6 +354,7 @@ def Library_Management_System():
 
 if __name__ == "__main__":
     Library_Management_System()
+
 
 
 # I have successfully created a library management system using classes in Python.
