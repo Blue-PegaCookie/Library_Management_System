@@ -1,0 +1,8 @@
+Summary of Commands
+git status – Check the status of your files.
+git add . or git add <file> – Stage files.
+git commit -m "message" – Commit the changes.
+git push origin main – Push the changes to a remote repository.
+
+Use git push -u origin <branch_name> the first time you push a branch to set up tracking.
+After the initial push, just use git push for future pushes.

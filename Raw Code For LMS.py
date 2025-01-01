@@ -13,7 +13,8 @@
 # Library Class: Manages a collection of books and members. Methods to add books, register members, and track borrowing transactions.
 # Transaction Class: Records details of each borrowing transaction, including member ID, book ISBN, borrow date, and return date.
 
-# start_time = 12:47:00
+
+from datetime import datetime, timedelta
 
 class Book:
     def __init__(self, title, author, ISBN):
@@ -40,43 +41,38 @@ class Book:
             print("Book has not been borrowed.")
             return False
 
-#Testing out the Book class
-
-# book1 = Book("The Great Gatsby", "F. Scott Fitzgerald", "9780743273565")
-# print(book1.checkout())
-# print(book1.return_book())
-
-# Test Successful (For basic understanding, I have not done data types tests)
-
 class Member:
+    MAX_BORROW_LIMIT = 5
+
     def __init__(self, member_id, name):
         self.member_id = member_id
         self.name = name
         self.borrowed_books = []
 
     def borrow_book(self, book):
+        if book in self.borrowed_books:
+            print("You have already borrowed this book.")
+            return False
+        if len(self.borrowed_books) >= self.MAX_BORROW_LIMIT:
+            print("You cannot borrow more than the allowed number of books.")
+            return False
         if book.checkout():
             self.borrowed_books.append(book)
             print("Book borrowed successfully.")
+            return True
         else:
             print("Book is not available.")
+            return False
 
     def return_book(self, book):
         if book in self.borrowed_books:
             if book.return_book():
                 self.borrowed_books.remove(book)
                 print("Book has been removed from your borrow list.")
+                return True
         else:
             print("You have not borrowed this book.")
-
-#Testing out the Member class
-
-# member1 = Member(1, "Alice")
-# book2 = Book("To Kill a Mockingbird", "Harper Lee", "9780061120084")
-# member1.borrow_book(book2)
-# member1.return_book(book2)
-
-# Test Successful (For basic understanding, I have not done data types tests)
+            return False
 
 class Transaction:
     def __init__(self, member_id, ISBN):
@@ -84,13 +80,21 @@ class Transaction:
         self.ISBN = ISBN
         self.borrow_date = None
         self.return_date = None
+        self.fine = 0
 
     def borrow_book(self, date):
         self.borrow_date = date
 
     def return_book(self, date):
         self.return_date = date
+        self.calculate_fine()
 
+    def calculate_fine(self):
+        if self.return_date and self.borrow_date:
+            overdue_days = (self.return_date - self.borrow_date).days - 14  # Assuming 2 weeks borrowing period
+            if overdue_days > 0:
+                self.fine = overdue_days * 1  # Assuming $1 fine per day
+                print(f"Fine for overdue: ${self.fine}")
 
 class Library:
     def __init__(self):
@@ -106,6 +110,22 @@ class Library:
         self.members.append(member)
         print("Member registered successfully.")
 
+    def get_date_input(self, prompt):
+        while True:
+            date_str = input(prompt)
+            try:
+                return datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                print("Invalid date format. Please use YYYY-MM-DD.")
+
+    def get_numeric_input(self, prompt):
+        while True:
+            value = input(prompt)
+            if value.isdigit():
+                return int(value)
+            else:
+                print("Invalid input. Please enter a numeric value.")
+
     def borrow_book(self, member_id, ISBN):
         member = next((member for member in self.members if member.member_id == member_id), None)
         book = next((book for book in self.books if book.ISBN == ISBN), None)
@@ -115,10 +135,14 @@ class Library:
         elif book is None:
             print("Book not found.")
         else:
-            member.borrow_book(book)
-            transaction = Transaction(member_id, ISBN)
-            transaction.borrow_book("2021-12-31")  # Example date
-            self.transactions.append(transaction)
+            if book.available:
+                borrow_date = self.get_date_input("Enter borrow date (YYYY-MM-DD): ")
+                if member.borrow_book(book):
+                    transaction = Transaction(member_id, ISBN)
+                    transaction.borrow_book(borrow_date)
+                    self.transactions.append(transaction)
+            else:
+                print(f"Book is already borrowed by another member.")
 
     def return_book(self, member_id, ISBN):
         member = next((member for member in self.members if member.member_id == member_id), None)
@@ -129,29 +153,91 @@ class Library:
         elif book is None:
             print("Book not found.")
         else:
-            member.return_book(book)
-            transaction = next((transaction for transaction in self.transactions if transaction.member_id == member_id and transaction.ISBN == ISBN), None)
-            if transaction is not None:
-                transaction.return_book("2021-12-31")  # Example date
+            if book in member.borrowed_books:
+                return_date = self.get_date_input("Enter return date (YYYY-MM-DD): ")
+                if member.return_book(book):
+                    transaction = next((transaction for transaction in self.transactions if transaction.member_id == member_id and transaction.ISBN == ISBN), None)
+                    if transaction is not None:
+                        transaction.return_book(return_date)
+                    else:
+                        print("Transaction not found.")
             else:
-                print("Transaction not found.")
+                print("This book was not borrowed by this member.")
 
-# Create a library instance
-# library = Library()
+    def display_books(self):
+        for book in self.books:
+            print(f"Title: {book.title}, Author: {book.author}, ISBN: {book.ISBN}, Available: {book.available}")
 
-# Add books to the library
-# book1 = Book("The Great Gatsby", "F. Scott Fitzgerald", "9780743273565")
-# book2 = Book("To Kill a Mockingbird", "Harper Lee", "9780061120084")
-# library.add_book(book1)
-# library.add_book(book2)
+    def display_members(self):
+        for member in self.members:
+            print(f"Member ID: {member.member_id}, Name: {member.name}")
 
-# Register a member
-# member1 = Member(1, "Alice")
-# library.register_member(member1)
+    def display_transactions(self):
+        for transaction in self.transactions:
+            borrow_date = transaction.borrow_date.strftime('%B %d, %Y') if transaction.borrow_date else "N/A"
+            return_date = transaction.return_date.strftime('%B %d, %Y') if transaction.return_date else "N/A"
+            overdue_status = "Overdue" if transaction.fine > 0 else "On Time"
+            print(f"Member ID: {transaction.member_id}, ISBN: {transaction.ISBN}, Borrowed: {borrow_date}, Returned: {return_date}, Fine: ${transaction.fine}, Status: {overdue_status}")
 
-# Borrow and return a book
-# library.borrow_book(1, "9780061120084")
-# library.return_book(1, "9780061120084")
+    def search_books(self, title=None, author=None):
+        results = [book for book in self.books if (title and title.lower() in book.title.lower()) or (author and author.lower() in book.author.lower())]
+        for book in results:
+            print(f"Title: {book.title}, Author: {book.author}, ISBN: {book.ISBN}, Available: {book.available}")
+
+def Library_Management_System():
+    library = Library()
+
+    while True:
+        print("\nLibrary Management System")
+        print("1. Add Book")
+        print("2. Register Member")
+        print("3. Borrow Book")
+        print("4. Return Book")
+        print("5. Display Books")
+        print("6. Display Members")
+        print("7. Display Transactions")
+        print("8. Search Books")
+        print("9. Exit")
+
+        choice = input("Enter your choice: ")
+
+        if choice == '1':
+            title = input("Enter book title: ")
+            author = input("Enter book author: ")
+            ISBN = input("Enter book ISBN: ")
+            book = Book(title, author, ISBN)
+            library.add_book(book)
+        elif choice == '2':
+            member_id = library.get_numeric_input("Enter member ID: ")
+            name = input("Enter member name: ")
+            member = Member(member_id, name)
+            library.register_member(member)
+        elif choice == '3':
+            member_id = library.get_numeric_input("Enter member ID: ")
+            ISBN = input("Enter book ISBN: ")
+            library.borrow_book(member_id, ISBN)
+        elif choice == '4':
+            member_id = library.get_numeric_input("Enter member ID: ")
+            ISBN = input("Enter book ISBN: ")
+            library.return_book(member_id, ISBN)
+        elif choice == '5':
+            library.display_books()
+        elif choice == '6':
+            library.display_members()
+        elif choice == '7':
+            library.display_transactions()
+        elif choice == '8':
+            title = input("Enter book title to search (leave blank to skip): ")
+            author = input("Enter book author to search (leave blank to skip): ")
+            library.search_books(title, author)
+        elif choice == '9':
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
+if __name__ == "__main__":
+    Library_Management_System()
+
 
 # I have successfully created a library management system using classes in Python.
 
