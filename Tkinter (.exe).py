@@ -25,7 +25,6 @@ window.mainloop() # Place window on computer screen, listen for events (mouse, k
 
 
 # Lesson 2
-
 # Label = A widget used to display text or an image within a window
 
 from tkinter import *
@@ -44,10 +43,7 @@ label = Label(window, text="YOHOHOHOHO -Brook",
               pady=20,
               image=photo,
               compound='bottom') # Create a label
-
-
 label.pack() # Add label to window
-
 # label.place(x=100, y=100) # Set label position
 
 
@@ -56,7 +52,6 @@ window.mainloop()
 
 
 # Lesson 3
-
 # Button = A widget used to display a clickable button within a window
 
 from tkinter import *
@@ -101,9 +96,7 @@ button.config(font=('Ink Free', 50, 'bold'))
 button.config(bg='#ff6200', fg='#fffb1f', activebackground='#FF0000', activeforeground='#fffb1f')
 
 image = PhotoImage(file="image 1.png")
-button.config(image=image, compound='bottom')
-# button.condifg(state=DISABLED)
-# disabled button (ACTIVE/DISABLED)
+button.config(image=image, compound='bottom') # button.condifg(state=DISABLED) # disabled button (ACTIVE/DISABLED)
 
 label = Label(window, text="Count")
 label.config(font=('Ink Free', 50, 'bold'))
@@ -116,3 +109,46 @@ window.mainloop()
 
 
 # Lesson 4
+
+# Entry widget = A widget used to display a single-line text field for user input
+
+from tkinter import *
+
+
+def submit():
+    username = entry.get()
+    print("Username: " + username)
+
+def delete():
+    entry.delete(0, END)
+    print("Deleted")
+
+def backspace():
+    entry.delete(len(entry.get()) - 1, END) # Delete the last character
+    print("Backspace")
+
+window = Tk()
+
+submit = Button(window, text='Submit', command=submit)
+submit.pack(side = RIGHT)
+
+delete = Button(window, text='Delete', command=delete)
+delete.pack(side = RIGHT)
+
+backspace = Button(window, text='Backspace', command=backspace)
+backspace.pack(side = RIGHT)
+
+entry = Entry()
+entry.config(font=('Ink free', 50, 'italic'), bg='#111111', fg='#00FF00', width=10)
+             #  show='*'  It changes everything into a * character, useful for hidden passwords
+
+# entry.insert(0, "Laugh like Brook") # Insert text into entry
+# entry.config(state=DISABLED) # Disabled entry
+
+entry.pack()
+window.mainloop()
+
+
+
+# Lesson 5
+
